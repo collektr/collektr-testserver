@@ -8,55 +8,12 @@ applications against.
 """
 
 import json
-import os
-import re
-
 import bottle
+from . import filters, models
 
 app = bottle.Bottle()
-
-_here = os.path.dirname(os.path.abspath(__file__))
-FIXTURES_DIR = os.path.join(_here, 'fixtures')
-COVERS_DIR = os.path.join(_here, 'covers')
-
-class Collection(object):
-    def __init__(self, fixtures=None):
-        self._index = {}
-        cover_reg = re.compile(r'^(\d{13})\.(jpe?g|gif|png)$', re.I)
-        self.covers = {}
-        for cover in os.listdir(COVERS_DIR):
-            basename = os.path.basename(cover)
-            m = cover_reg.match(basename)
-            if m:
-                self.covers[m.group(1)] = '/cover/%s' % m.group(1)
-        if fixtures:
-            path = os.path.join(FIXTURES_DIR, fixtures)
-            self.data = json.load(open(path))
-            for entry in self.data:
-                self._index[entry['ean']] = entry
-                self._index[entry['id']] = entry
-                if entry['ean'] in self.covers:
-                    entry['cover'] = self.covers[entry['ean']]
-
-    def __getitem__(self, key):
-        return self._index[key]
-
-collection = Collection('collection.json')
-
-
-def uuid_filter(config):
-    """
-    Matches a valid UUID.
-    """
-    regexp = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-    def to_python(match):
-        return match
-    def to_url(uri):
-        return uri
-    return regexp, to_python, to_url
-
-app.router.add_filter('uuid', uuid_filter)
-
+app.router.add_filter('uuid', filters.uuid_filter)
+collection = models.Collection('collection.json')
 
 @app.hook('before_request')
 def set_json_header():
@@ -101,7 +58,8 @@ def delete_item(item_id): pass
 def callback(ean):
     return bottle.static_file('%s.jpg' % ean, COVERS_DIR)
 
-if __name__ == '__main__':
+
+def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='localhost',
@@ -111,5 +69,6 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', default=False,
                         help='Turn bottle debugging on.')
     options = parser.parse_args()
-    if options.debug: bottle.debug(True)
+    if options.debug:
+        bottle.debug(True)
     app.run(host=options.host, port=options.port)
